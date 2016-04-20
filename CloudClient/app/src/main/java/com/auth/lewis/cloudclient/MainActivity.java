@@ -64,6 +64,8 @@ public class MainActivity extends Activity {
 
     public static final String TOKENPREF = "tkn";
 
+    public static boolean authCheck = false;
+
     // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
 
@@ -76,12 +78,10 @@ public class MainActivity extends Activity {
     // simple stringbulder to store textual data retrieved from mobile app service table
     StringBuilder sb = new StringBuilder();
 
-    public void buttonOnClick(View view) {
-        LoginManager.getInstance().logOut();
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+        FacebookSdk.sdkInitialize(getApplicationContext());
 
         super.onCreate(savedInstanceState);
         FacebookSdk.sdkInitialize(getApplicationContext());
@@ -187,6 +187,7 @@ public class MainActivity extends Activity {
                             user.getUserId()), "Success");
                     cacheUserToken(mClient.getCurrentUser());
                     createTable();
+                    authCheck = true;
                 }
             });
         }
@@ -202,7 +203,6 @@ public class MainActivity extends Activity {
 
     // method to add data to mobile service table
     public void addData(View view) {
-
 
         // create reference to TextView input widgets
         TextView data1 = (TextView) findViewById(R.id.insertText1);
@@ -239,35 +239,56 @@ public class MainActivity extends Activity {
 
     // method to view data from mobile service table
     public void viewData(View view) {
+        if (authCheck == true) {
 
-        display.setText("Loading...");
+            display.setText("Loading...");
 
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    final List<ToDoItem> result = mToDoTable.select("id", "text").execute().get();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            // get all data from column 'text' only add add to the stringbuilder
-                            for (ToDoItem item : result) {
-                                sb.append(item.text + " ");
+            new AsyncTask<Void, Void, Void>() {
+                @Override
+                protected Void doInBackground(Void... params) {
+                    try {
+                        final List<ToDoItem> result = mToDoTable.select("id", "text").execute().get();
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                // get all data from column 'text' only add add to the stringbuilder
+                                for (ToDoItem item : result) {
+                                    sb.append(item.text + " ");
+                                }
+
+                                // display stringbuilder text using scrolling method
+                                display.setText(sb.toString());
+                                display.setMovementMethod(new ScrollingMovementMethod());
+                                sb.setLength(0);
                             }
-
-                            // display stringbuilder text using scrolling method
-                            display.setText(sb.toString());
-                            display.setMovementMethod(new ScrollingMovementMethod());
-                            sb.setLength(0);
-                        }
-                    });
-                } catch (Exception exception) {
+                        });
+                    } catch (Exception exception) {
+                    }
+                    return null;
                 }
-                return null;
-            }
-        }.execute();
+            }.execute();
+        }
+        else {
+            //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
+            final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
+            alertDialog.setTitle(("Authentication Failed"));
+            alertDialog.setIcon(R.mipmap.ic_alert); //include an alert icon
+            alertDialog.setMessage("Restart The Application To Authenticate");
+            alertDialog.setButton(DialogInterface.BUTTON_POSITIVE, "Authenticate", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which) {
+                    authenticate();
+                    createTable();
+                }
+            });
+            alertDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Close", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which) {
+                    alertDialog.hide();
+                    System.exit(0);
+                }
+            });
+            alertDialog.show();
+        }
     }
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
