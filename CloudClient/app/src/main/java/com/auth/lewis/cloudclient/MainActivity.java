@@ -4,31 +4,36 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.media.session.MediaSession;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.ListView;
 import android.widget.TextView;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Date;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.widget.Toast;
 
 import com.facebook.AccessToken;
 import com.facebook.FacebookSdk;
-import com.facebook.Profile;
-import com.facebook.login.LoginManager;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -36,6 +41,11 @@ import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAut
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
 import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONStringer;
+import org.w3c.dom.Text;
 
 import java.net.MalformedURLException;
 import java.util.List;
@@ -64,7 +74,7 @@ public class MainActivity extends Activity {
 
     public static final String TOKENPREF = "tkn";
 
-    public static boolean authCheck = false;
+    public static String currentToken = "";
 
     // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
@@ -81,19 +91,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
-        FacebookSdk.sdkInitialize(getApplicationContext());
-
         super.onCreate(savedInstanceState);
-        FacebookSdk.sdkInitialize(getApplicationContext());
+            FacebookSdk.sdkInitialize(this.getApplicationContext());
+
         // Initialize the SDK before executing any other operations,
         // especially, if you're using Facebook UI elements.
-        setContentView(R.layout.activity_main);
+            setContentView(R.layout.activity_main);
 
        try {
 
            // using the MobileServiceClient global object, create a reference to YOUR service
            mClient = new MobileServiceClient(
-                   "https://lewismcservice.azurewebsites.net",
+                   "https://lewismcservice.azurewebsites.net/.auth/me",
                    this
            );
 
@@ -102,9 +111,10 @@ public class MainActivity extends Activity {
        }
         //check internet connection
         if (isConnectedToInternet()) {
-
             authenticate();
             createTable();
+            AsyncTaskParseJson taskJson = new AsyncTaskParseJson();
+            taskJson.execute("");
         }
 
         else {
@@ -134,7 +144,7 @@ public class MainActivity extends Activity {
         Editor editor = prefs.edit();
         editor.putString(USERIDPREF, user.getUserId());
         editor.putString(TOKENPREF, user.getAuthenticationToken());
-        editor.commit();
+        editor.apply();
     }
 
     private boolean loadUserTokenCache(MobileServiceClient client)
@@ -150,6 +160,7 @@ public class MainActivity extends Activity {
         MobileServiceUser user = new MobileServiceUser(userId);
         user.setAuthenticationToken(token);
         client.setCurrentUser(user);
+        saveData(user.getAuthenticationToken().toString());
 
         return true;
     }
@@ -172,7 +183,7 @@ public class MainActivity extends Activity {
         // If we failed to load a token cache, login and create a token cache
         else
         {
-            // Login using the Google provider.
+            // Login using the FB provider.
             ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
 
             Futures.addCallback(mLogin, new FutureCallback<MobileServiceUser>() {
@@ -180,17 +191,48 @@ public class MainActivity extends Activity {
                 public void onFailure(Throwable exc) {
                     createAndShowDialog("You must log in. Login Required", "Error");
                 }
+
                 @Override
                 public void onSuccess(MobileServiceUser user) {
                     createAndShowDialog(String.format(
-                            "You are now logged in - %1$2s",
-                            user.getUserId()), "Success");
+                            "Authentication Token Stored - %1$2s",
+                            user.getUserId() + user.getAuthenticationToken()), "Success!");
                     cacheUserToken(mClient.getCurrentUser());
                     createTable();
-                    authCheck = true;
+                    saveData(user.getAuthenticationToken().toString());
                 }
             });
         }
+    }
+
+    // method to add data to mobile service table
+    public void saveData(String Token) {
+
+        // Create a new data item from the text input
+        final ToDoItem item = new ToDoItem();
+        item.authToken = Token;
+
+        // This is an async task to call the mobile service and insert the data
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... params) {
+                try {
+                    //
+                    final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+
+                            // code inserted here can update UI elements, if required
+                        }
+                    });
+                } catch (Exception exception) {
+
+                }
+                return null;
+            }
+        }.execute();
     }
 
     private void createAndShowDialog(String message, String title) {
@@ -239,7 +281,6 @@ public class MainActivity extends Activity {
 
     // method to view data from mobile service table
     public void viewData(View view) {
-        if (authCheck == true) {
 
             display.setText("Loading...");
 
@@ -267,27 +308,6 @@ public class MainActivity extends Activity {
                     return null;
                 }
             }.execute();
-        }
-        else {
-            //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
-            final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
-            alertDialog.setTitle(("Authentication Failed"));
-            alertDialog.setIcon(R.mipmap.ic_alert); //include an alert icon
-            alertDialog.setMessage("Restart The Application To Authenticate");
-            alertDialog.setButton(DialogInterface.BUTTON_POSITIVE, "Authenticate", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int which) {
-                    authenticate();
-                    createTable();
-                }
-            });
-            alertDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Close", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int which) {
-                    alertDialog.hide();
-                    System.exit(0);
-                }
-            });
-            alertDialog.show();
-        }
     }
 
     @Override
@@ -311,9 +331,105 @@ public class MainActivity extends Activity {
     public class ToDoItem {
         private String id;
         private String text;
+        private String authToken;
+        private String firstName;
+        private String lastname;
+        private Date dateAuthenticated;
+        private String appID;
+        private static final String TAG = "MyActivity";
     }
 
+    public class AsyncTaskParseJson extends AsyncTask<String, String, String> {
 
+        ArrayList<String> items = new ArrayList<String>();
 
+        @Override
+        protected void onPreExecute() {
+        }
 
+        @Override
+        // this method is used for...................
+        protected String doInBackground(String... arg0) {
+
+            try {
+                //the URL of the weather web service is called - passing in the latitude and longitude variables (to get current location)
+                String Urlstring = "https://lewismcservice.azurewebsites.net/.auth/me";
+                URL url = new URL(Urlstring.toString());
+                HttpURLConnection urlConnection = null;
+                BufferedReader reader = null;
+                String imageJsonStr = null;
+
+                urlConnection = (HttpURLConnection) url.openConnection();
+                urlConnection.setRequestMethod("GET");
+                urlConnection.setRequestProperty("X-ZUMO-AUTH", arg0[0] );
+                //set.
+                urlConnection.connect();
+
+                InputStream inputStream = urlConnection.getInputStream();
+                StringBuffer buffer = new StringBuffer();
+                if (inputStream == null)
+                    return null;
+                reader = new BufferedReader(new InputStreamReader(inputStream));
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    buffer.append(line + "\n");
+                }
+
+                if (buffer.length() == 0) {
+                    return null;
+                }
+                imageJsonStr = buffer.toString();
+
+                //JSONArray topary = new JSONArray(json);
+                //JSONObject topobj = topary.getJSONObject(0);
+                //JSONArray innary = topobj.getJSONArray("user_claims");
+                //JSONObject innobj = innary.getJSONObject(1);
+                //Object thingy = innobj.get("val");
+                Log.v("Thingy: ", imageJsonStr + " ");
+
+                //JSON object(s) 'object0' and 'objectCountry' created, sys object is now accessible
+                //JSONArray Array0 = new JSONArray(json);
+                //JSONObject string = new JSONObject();
+                //JSONObject main0 = new JSONObject().getJSONArray("array").getJSONObject(0);
+
+                //String accesstoken = main0.getString("user_id");
+
+                //items.add(accesstoken);
+                //currentToken = accesstoken;
+
+                //returns name of sys object along with country - which is then appended as an item to the listView of the Weather Activity.
+                //e.g. Lincoln, GB
+                //items.add(object0.getString("name") + ", " + objectCountry.getString("country"));
+
+                //Temperature retrieved 'main' object - Math.round function rounds the Kelvin value to whole number,
+                // -273.15 is the value you subtract from Kelvin to achieve °C.
+         /*       JSONObject object = new JSONObject(json).getJSONObject("main");
+                items.add("Temperature: " + Math.round(object.getDouble(("temp")) - 273.15) + "°C");
+
+                //JSON Array 'weather' is accessed, object inside the Array is then accessed {0} (set as int i = 0), string(s) from the object then retrieved 'main' and 'description'.
+                JSONArray weather = (new JSONObject(json)).getJSONArray("weather");
+                int h = 0;
+                items.add("Type: " + (weather.getJSONObject(h).getString("main") + ", " + (weather.getJSONObject(h).getString("description"))));
+
+                JSONObject object2 = new JSONObject(json).getJSONObject("main");
+                items.add("Humidity: " + object2.getInt("humidity") + "%");
+
+                JSONObject object3 = new JSONObject(json).getJSONObject("wind");
+                items.add("Wind Speed: " + object3.getDouble("speed") + " mps"); */
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                Log.e("ERRORR", e.toString());
+            }
+            return null;
+        }
+
+        //List View is created and parsed JSON data form web service is appended to a new item of the list
+        @Override
+        protected void onPostExecute(String strFromDoInBg) {
+            TextView text = (TextView) findViewById(R.id.txtResult);
+            text.setText(currentToken);
+        }
+    }
 }

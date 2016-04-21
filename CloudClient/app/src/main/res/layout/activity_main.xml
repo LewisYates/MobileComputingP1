@@ -48,4 +48,15 @@
         android:layout_below="@+id/clickAddData"
         android:layout_alignStart="@+id/clickAddData" />
 
+    <TextView
+        android:text="ere mate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/txtResult"
+        android:layout_marginTop="56dp"
+        android:scrollbars="vertical"
+        android:maxLines="10"
+        android:layout_below="@+id/displayData"
+        android:layout_alignStart="@+id/clickViewData" />
+
 </RelativeLayout>
