@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.media.session.MediaSession;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
@@ -16,10 +15,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
-
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -30,9 +27,6 @@ import java.util.Date;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
-import android.widget.Toast;
-
-import com.facebook.AccessToken;
 import com.facebook.FacebookSdk;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -41,12 +35,8 @@ import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAut
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
 import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.json.JSONStringer;
-import org.w3c.dom.Text;
-
 import java.net.MalformedURLException;
 import java.util.List;
 
@@ -74,7 +64,14 @@ public class MainActivity extends Activity {
 
     public static final String TOKENPREF = "tkn";
 
+    public static String authToken;
+
+    private String accessResult;
+
     public static String currentToken = "";
+
+    //Create an array that will hold the parsed weather data (String values)
+    ArrayList<String> items = new ArrayList<String>();
 
     // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
@@ -167,7 +164,7 @@ public class MainActivity extends Activity {
 
     private void createTable(){
 
-        display = (TextView) findViewById(R.id.displayData);
+       // display = (TextView) findViewById(R.id.displayData);
 
         // using the MobileServiceTable object created earlier, create a reference to YOUR table
         mToDoTable = mClient.getTable(ToDoItem.class);
@@ -198,6 +195,7 @@ public class MainActivity extends Activity {
                             "Authentication Token Stored - %1$2s",
                             user.getUserId() + user.getAuthenticationToken()), "Success!");
                     cacheUserToken(mClient.getCurrentUser());
+                    authToken = user.getAuthenticationToken();
                     createTable();
                     saveData(user.getAuthenticationToken().toString());
                 }
@@ -247,13 +245,13 @@ public class MainActivity extends Activity {
     public void addData(View view) {
 
         // create reference to TextView input widgets
-        TextView data1 = (TextView) findViewById(R.id.insertText1);
+       // TextView data1 = (TextView) findViewById(R.id.insertText1);
         // the below textview widget isn't used (yet!)
-        TextView data2 = (TextView) findViewById(R.id.insertText2);
+        //TextView data2 = (TextView) findViewById(R.id.insertText2);
 
         // Create a new data item from the text input
-        final ToDoItem item = new ToDoItem();
-        item.text = data1.getText().toString();
+        //final ToDoItem item = new ToDoItem();
+       // item.text = data1.getText().toString();
 
         // This is an async task to call the mobile service and insert the data
         new AsyncTask<Void, Void, Void>() {
@@ -261,7 +259,7 @@ public class MainActivity extends Activity {
             protected Void doInBackground(Void... params) {
                 try {
                     //
-                    final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
+                  //  final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
 
                     runOnUiThread(new Runnable() {
                         @Override
@@ -354,39 +352,32 @@ public class MainActivity extends Activity {
             try {
                 //the URL of the weather web service is called - passing in the latitude and longitude variables (to get current location)
                 String Urlstring = "https://lewismcservice.azurewebsites.net/.auth/me";
-                URL url = new URL(Urlstring.toString());
-                HttpURLConnection urlConnection = null;
-                BufferedReader reader = null;
-                String imageJsonStr = null;
+                httpConnect jParser = new httpConnect();
+                URL url = new URL("https://lewismcservice.azurewebsites.net/.auth/me");
+                HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
 
+                //get json string from service url
+                String json = jParser.getJSONFromUrl(MainActivity.this, Urlstring);
                 urlConnection = (HttpURLConnection) url.openConnection();
+
                 urlConnection.setRequestMethod("GET");
-                urlConnection.setRequestProperty("X-ZUMO-AUTH", arg0[0] );
+                urlConnection.setRequestProperty("X-ZUMO-AUTH", authToken);
+                urlConnection.addRequestProperty("content-length", "0");
+                urlConnection.setUseCaches(false);
+                urlConnection.setConnectTimeout(10000);
+                urlConnection.setReadTimeout(10000);
+                urlConnection.connect();
+                int status = urlConnection.getResponseCode();
+
                 //set.
                 urlConnection.connect();
 
-                InputStream inputStream = urlConnection.getInputStream();
-                StringBuffer buffer = new StringBuffer();
-                if (inputStream == null)
-                    return null;
-                reader = new BufferedReader(new InputStreamReader(inputStream));
-
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    buffer.append(line + "\n");
-                }
-
-                if (buffer.length() == 0) {
-                    return null;
-                }
-                imageJsonStr = buffer.toString();
-
-                //JSONArray topary = new JSONArray(json);
-                //JSONObject topobj = topary.getJSONObject(0);
-                //JSONArray innary = topobj.getJSONArray("user_claims");
-                //JSONObject innobj = innary.getJSONObject(1);
-                //Object thingy = innobj.get("val");
-                Log.v("Thingy: ", imageJsonStr + " ");
+                JSONArray topary = new JSONArray(json);
+                JSONObject topobj = topary.getJSONObject(2);
+                JSONArray innary = topobj.getJSONArray("user_claims");
+                JSONObject innobj = innary.getJSONObject(1);
+                Object name = innobj.get("val");
+                //Log.v("Thingy: ", imageJsonStr + " ");
 
                 //JSON object(s) 'object0' and 'objectCountry' created, sys object is now accessible
                 //JSONArray Array0 = new JSONArray(json);
@@ -428,8 +419,9 @@ public class MainActivity extends Activity {
         //List View is created and parsed JSON data form web service is appended to a new item of the list
         @Override
         protected void onPostExecute(String strFromDoInBg) {
-            TextView text = (TextView) findViewById(R.id.txtResult);
-            text.setText(currentToken);
+            ListView list = (ListView) findViewById(R.id.dataView);
+            ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
+            list.setAdapter(facebookAdapter);
         }
     }
 }
