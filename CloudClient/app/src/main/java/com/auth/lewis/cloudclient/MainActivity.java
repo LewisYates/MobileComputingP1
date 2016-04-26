@@ -17,7 +17,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -41,28 +40,12 @@ import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAut
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
 import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import java.net.MalformedURLException;
 import java.util.List;
-import se.simbio.encryption.Encryption;
 
 
 public class MainActivity extends Activity {
-
-    //Check to see if the device is connected to the internet
-    public boolean isConnectedToInternet() {
-        ConnectivityManager internetConn = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (internetConn != null) {
-            NetworkInfo[] info = internetConn.getAllNetworkInfo();
-            if (info != null) //If there is a connection present
-                for (int i = 0; i < info.length; i++)
-                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-                        return true; //return the state of the connection
-                    }
-        }
-        return false; //otherwise, return nothing
-    }
 
     //public declarations of user pref, token etc.
     public static final String SHAREDPREFFILE = "temp";
@@ -82,14 +65,27 @@ public class MainActivity extends Activity {
     // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
 
-    // Create an object for  a table on your mobile app service
+    // Create an object for a table on your mobile app service
     private MobileServiceTable<ToDoItem> mToDoTable;
 
-    // global variable to update a TextView control text
     TextView display;
 
     // simple stringbulder to store textual data retrieved from mobile app service table
     StringBuilder sb = new StringBuilder();
+
+    //Check to see if the device is connected to the internet
+    public boolean isConnectedToInternet() {
+        ConnectivityManager internetConn = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (internetConn != null) {
+            NetworkInfo[] info = internetConn.getAllNetworkInfo();
+            if (info != null) //If there is a connection present
+                for (int i = 0; i < info.length; i++)
+                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
+                        return true; //return the state of the connection
+                    }
+        }
+        return false; //otherwise, return nothing
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,8 +98,6 @@ public class MainActivity extends Activity {
         // especially, if you're using Facebook UI elements.
         setContentView(R.layout.activity_main);
         image = (ImageView) findViewById(R.id.profilePicture);
-
-        //10154073223068446
 
         try {
 
@@ -142,6 +136,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    //Cache methods: cacheUserToken, loadUserToken sourced and modified from: https://azure.microsoft.com/en-gb/documentation/articles/mobile-services-dotnet-backend-android-get-started-users/
     private void cacheUserToken(MobileServiceUser user) {
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
         Editor editor = prefs.edit();
@@ -169,20 +164,18 @@ public class MainActivity extends Activity {
 
     private void createTable() {
 
-        // display = (TextView) findViewById(R.id.displayData);
-
-        // using the MobileServiceTable object created earlier, create a reference to YOUR table
+        //using the MobileServiceTable object created earlier, create a reference to YOUR table
         mToDoTable = mClient.getTable(ToDoItem.class);
         new AsyncTaskParseJson().execute();
     }
 
-    //aunthenticate method to allow for facebook aunthentication to start
+    //aunthenticate method to allow for facebook aunthentication
     private void authenticate() {
         // We first try to load a token cache if one exists.
         if (loadUserTokenCache(mClient)) {
             createTable();
         }
-        // If we failed to load a token cache, login and create a token cache
+        //If we failed to load a token cache, login and create a token cache
         else {
             // Login using the FB provider.
             ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
@@ -206,8 +199,9 @@ public class MainActivity extends Activity {
         }
     }
 
+    //getDisplayPicture method used to successfully pull the display picture from authed facebook account
     private class getDisplayPicture extends AsyncTask<String, Void, Bitmap> {
-        ImageView image; // Declare a variable to store the Imageview
+        ImageView image; //Declare a variable to store the Imageview
 
         public getDisplayPicture(ImageView bmImage) {
             this.image = bmImage;
@@ -369,18 +363,14 @@ public class MainActivity extends Activity {
 
         ArrayList<String> items = new ArrayList<String>();
 
+        //API call shows RAW JSON data for authenticated facebook account
         private static final String API = "https://lewismcservice.azurewebsites.net/.auth/me";
-
-        private static final String API_RESULT = "";
-
-        String yourServiceUrl = (API);
 
         @Override
         protected void onPreExecute() {
         }
 
         @Override
-        // this method is used for...................
         protected String doInBackground(String... arg0) {
 
             try {
@@ -401,8 +391,10 @@ public class MainActivity extends Activity {
         }
     }
 
+    //
     public class AsyncTaskParseJson2 extends AsyncTask<String, String, String> {
 
+        //Call to Graph API plus the user accessToken to get details from Facebook
         private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,email&access_token=" + accessToken);
         String yourServiceUrl = (FB_API);
         JSONObject FBJSON = new JSONObject();
@@ -412,7 +404,7 @@ public class MainActivity extends Activity {
         }
 
         @Override
-        // this method is used for...................
+        //Call getFacebook method
         protected String doInBackground(String... arg0) {
 
             try {
@@ -430,16 +422,21 @@ public class MainActivity extends Activity {
         @Override
         protected void onPostExecute(String strFromDoInBg) {
             try {
+                //set array for storing of parsed data
                 String[] results = new String[3];
                 results[0] = FBJSON.getString("name");
                 results[1] = FBJSON.getString("email");
                 results[2] = FBJSON.getString("gender");
-                String USERID = FBJSON.getString("id");
+                String USERID = FBJSON.getString("id"); //facebook name
+
                 ImageView image = (ImageView) findViewById(R.id.profilePicture);
-                new getDisplayPicture(image).execute("https://graph.facebook.com/" + USERID + "/picture?type=large");
+                new getDisplayPicture(image).execute("https://graph.facebook.com/" + USERID + "/picture?type=large"); //call to graph API to get user profile picture
+
+                //Array list declared, to which all facebook data is stored per each item in the list view
                 ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
                 ListView list = (ListView) findViewById(R.id.dataView);
                 ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
+
                 list.setAdapter(facebookAdapter);
             }catch (Exception e)
             {
@@ -448,6 +445,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    //getAzure method gets the facebook authentication token  - allowing to make a call to the facebook Graph API
     public class getAzure
     {
         final String TAG = "JsonParser.java";
@@ -457,31 +455,32 @@ public class MainActivity extends Activity {
             try{
                 URL u = new URL(url);
 
-                HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
+                //open url connection to azure
+                HttpURLConnection urlConnection = (HttpURLConnection) u.openConnection();
 
                 //request data from azure
-                restConnection.setRequestMethod("GET");
-                restConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
-                restConnection.addRequestProperty("content-length", "0");
-                restConnection.setUseCaches(false);
-                restConnection.setAllowUserInteraction(false);
-                restConnection.setConnectTimeout(10000);
-                restConnection.setReadTimeout(10000);
-                restConnection.connect();
+                urlConnection.setRequestMethod("GET");
+                urlConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
+                urlConnection.addRequestProperty("content-length", "0");
+                urlConnection.setUseCaches(false);
+                urlConnection.setAllowUserInteraction(false);
+                urlConnection.setConnectTimeout(10000);
+                urlConnection.setReadTimeout(10000);
+                urlConnection.connect();
 
-                int status = restConnection.getResponseCode();
+                int status = urlConnection.getResponseCode();
 
                 switch (status) {
                     case 200:
                     case 201:
-                        // live connection to  REST service is established here using getInputStream() method
-                        BufferedReader br = new BufferedReader(new InputStreamReader(restConnection.getInputStream()));
+                        //live connection to  REST service is established here using getInputStream() method
+                        BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
 
                         // create a new string builder to store json data returned from the REST service
                         StringBuilder sb = new StringBuilder();
                         String line = "";
 
-                        // loop through returned data line by line and append to stringbuffer 'sb' variable
+                        //loop through returned data line by line and append to stringbuffer 'sb' variable
                         while ((line = br.readLine()) != null) {
                             sb.append(line + "\n");
                         }
@@ -510,6 +509,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    //facebook class modified and sourced from Derek Foster (2015), Semester A: Workshop 5.
     public class getFacebook {
         final String TAG = "JsonParser.java";
         String json = "";
@@ -519,25 +519,25 @@ public class MainActivity extends Activity {
             try{
                 URL u = new URL(url);
 
-                HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
+                HttpURLConnection urlConnection = (HttpURLConnection) u.openConnection();
 
                 //request data from azure
-                restConnection.setRequestMethod("GET");
-                restConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
-                restConnection.addRequestProperty("content-length", "0");
-                restConnection.setUseCaches(false);
-                restConnection.setAllowUserInteraction(false);
-                restConnection.setConnectTimeout(10000);
-                restConnection.setReadTimeout(10000);
-                restConnection.connect();
+                urlConnection.setRequestMethod("GET");
+                urlConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
+                urlConnection.addRequestProperty("content-length", "0");
+                urlConnection.setUseCaches(false);
+                urlConnection.setAllowUserInteraction(false);
+                urlConnection.setConnectTimeout(10000);
+                urlConnection.setReadTimeout(10000);
+                urlConnection.connect();
 
-                int status = restConnection.getResponseCode();
+                int status = urlConnection.getResponseCode();
 
                 switch (status) {
                     case 200:
                     case 201:
                         // live connection to  REST service is established here using getInputStream() method
-                        BufferedReader br = new BufferedReader(new InputStreamReader(restConnection.getInputStream()));
+                        BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
 
                         // create a new string builder to store json data returned from the REST service
                         StringBuilder sb = new StringBuilder();
