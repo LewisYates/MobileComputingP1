@@ -11,24 +11,23 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
-import android.widget.TextView;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.CookieHandler;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
@@ -39,11 +38,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAuthenticationProvider;
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
-import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
 import org.json.JSONObject;
 import java.net.MalformedURLException;
-import java.util.List;
-
 
 public class MainActivity extends Activity {
 
@@ -65,12 +61,7 @@ public class MainActivity extends Activity {
     // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
 
-    // Create an object for a table on your mobile app service
-    private MobileServiceTable<ToDoItem> mToDoTable;
-
-    TextView display;
-
-    // simple stringbulder to store textual data retrieved from mobile app service table
+    // simple stringbulder to store textual data retrieved from mobile app service
     StringBuilder sb = new StringBuilder();
 
     //Check to see if the device is connected to the internet
@@ -92,6 +83,17 @@ public class MainActivity extends Activity {
 
         super.onCreate(savedInstanceState);
         FacebookSdk.sdkInitialize(this.getApplicationContext());
+        setContentView(R.layout.activity_main);
+        Button logOutButton = (Button)findViewById(R.id.logOutButton);
+
+        logOutButton.setOnClickListener(
+                new Button.OnClickListener() {
+                    public void onClick(View v) {
+
+                        closeApplication(v);
+                    }
+                }
+        );
 
         ImageView image;
         // Initialize the SDK before executing any other operations,
@@ -110,10 +112,12 @@ public class MainActivity extends Activity {
         } catch (MalformedURLException e) {
             e.printStackTrace();
         }
+
+
+
         //check internet connection
         if (isConnectedToInternet()) {
             authenticate();
-
 
         } else {
             //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
@@ -134,6 +138,27 @@ public class MainActivity extends Activity {
             });
             alertDialog.show();
         }
+    }
+
+    //call to close the application from Log Out Button
+    public void closeApplication(View v){
+
+        final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
+        alertDialog.setTitle(("Log Out"));
+        alertDialog.setIcon(R.mipmap.ic_alert); //include an alert icon
+        alertDialog.setMessage("Are you sure you want to log out?");
+        alertDialog.setButton(DialogInterface.BUTTON_POSITIVE, "Yes", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                finish();
+                System.exit(0); //closes the current activity
+            }
+        });
+        alertDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "No", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                alertDialog.hide();
+            }
+        });
+        alertDialog.show();
     }
 
     //Cache methods: cacheUserToken, loadUserToken sourced and modified from: https://azure.microsoft.com/en-gb/documentation/articles/mobile-services-dotnet-backend-android-get-started-users/
@@ -162,21 +187,14 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    private void createTable() {
-
-        //using the MobileServiceTable object created earlier, create a reference to YOUR table
-        mToDoTable = mClient.getTable(ToDoItem.class);
-        new AsyncTaskParseJson().execute();
-    }
-
-    //aunthenticate method to allow for facebook aunthentication
+    //aunthenticate method to allow for facebook aunthentication and successful login
     private void authenticate() {
-        // We first try to load a token cache if one exists.
-        if (loadUserTokenCache(mClient)) {
-            createTable();
+
+        if(loadUserTokenCache(mClient)){
+            new AsyncTaskParseJson().execute();
         }
+
         //If we failed to load a token cache, login and create a token cache
-        else {
             // Login using the FB provider.
             ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
 
@@ -188,71 +206,42 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onSuccess(MobileServiceUser user) {
+
                     createAndShowDialog(
-                            "You Have Been Logged In!",
+                            "You Have Been Logged In!\n" +
+                                    "\nAuthorisation Encrypted",
                             "Success!");
                     cacheUserToken(mClient.getCurrentUser());
                     authToken = user.getAuthenticationToken(); //get authentication token
-                    createTable();
+                    new AsyncTaskParseJson().execute();
                 }
+
             });
-        }
+
     }
 
     //getDisplayPicture method used to successfully pull the display picture from authed facebook account
     private class getDisplayPicture extends AsyncTask<String, Void, Bitmap> {
         ImageView image; //Declare a variable to store the Imageview
 
-        public getDisplayPicture(ImageView bmImage) {
-            this.image = bmImage;
+        public getDisplayPicture(ImageView bmImage) {this.image = bmImage;
         }
 
         protected Bitmap doInBackground(String... urls) {
             String urldisplay = urls[0];
-            Bitmap Icon = null;
+            Bitmap displayPic = null;
             try {
                 InputStream in = new java.net.URL(urldisplay).openStream();
-                Icon = BitmapFactory.decodeStream(in);
+                displayPic = BitmapFactory.decodeStream(in);
             } catch (Exception e) {
                 Log.e("Error", e.getMessage());
                 e.printStackTrace();
             }
-            return Icon;
+            return displayPic;
         }
 
-        protected void onPostExecute(Bitmap result) {
-            image.setImageBitmap(result);
+        protected void onPostExecute(Bitmap result) {image.setImageBitmap(result);
         }
-    }
-
-    // method to add data to mobile service table
-    public void saveData(String Token) {
-
-        // Create a new data item from the text input
-        final ToDoItem item = new ToDoItem();
-        item.authToken = Token;
-
-        // This is an async task to call the mobile service and insert the data
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    //
-                    final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            // code inserted here can update UI elements, if required
-                        }
-                    });
-                } catch (Exception exception) {
-
-                }
-                return null;
-            }
-        }.execute();
     }
 
     private void createAndShowDialog(String message, String title) {
@@ -261,73 +250,6 @@ public class MainActivity extends Activity {
         builder.setMessage(message);
         builder.setTitle(title);
         builder.create().show();
-    }
-
-    // method to add data to mobile service table
-    public void addData(View view) {
-
-        // create reference to TextView input widgets
-        // TextView data1 = (TextView) findViewById(R.id.insertText1);
-        // the below textview widget isn't used (yet!)
-        //TextView data2 = (TextView) findViewById(R.id.insertText2);
-
-        // Create a new data item from the text input
-        //final ToDoItem item = new ToDoItem();
-        // item.text = data1.getText().toString();
-
-        // This is an async task to call the mobile service and insert the data
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    //
-                    //  final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            // code inserted here can update UI elements, if required
-
-                        }
-                    });
-                } catch (Exception exception) {
-
-                }
-                return null;
-            }
-        }.execute();
-    }
-
-    // method to view data from mobile service table
-    public void viewData(View view) {
-
-        display.setText("Loading...");
-
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    final List<ToDoItem> result = mToDoTable.select("id", "text").execute().get();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            // get all data from column 'text' only add add to the stringbuilder
-                            for (ToDoItem item : result) {
-                                sb.append(item.text + " ");
-                            }
-
-                            // display stringbuilder text using scrolling method
-                            display.setText(sb.toString());
-                            display.setMovementMethod(new ScrollingMovementMethod());
-                            sb.setLength(0);
-                        }
-                    });
-                } catch (Exception exception) {
-                }
-                return null;
-            }
-        }.execute();
     }
 
     @Override
@@ -345,104 +267,6 @@ public class MainActivity extends Activity {
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    // class used to work with ToDoItem table in mobile service, this needs to be edited if you wish to use with another table
-    public class ToDoItem {
-        private String id;
-        private String text;
-        private String authToken;
-        private String firstName;
-        private String lastname;
-        private Date dateAuthenticated;
-        private String appID;
-        private static final String TAG = "MyActivity";
-    }
-
-    public class AsyncTaskParseJson extends AsyncTask<String, String, String> {
-
-        ArrayList<String> items = new ArrayList<String>();
-
-        //API call shows RAW JSON data for authenticated facebook account
-        private static final String API = "https://lewismcservice.azurewebsites.net/.auth/me";
-
-        @Override
-        protected void onPreExecute() {
-        }
-
-        @Override
-        protected String doInBackground(String... arg0) {
-
-            try {
-                getAzure jParser = new getAzure();
-                accessResult = jParser.getJSONFromUrl(MainActivity.this, API, authToken);
-                accessToken = accessResult;
-            } catch (Exception e) {
-                e.printStackTrace();
-                Log.e("ERRORR", e.toString());
-            }
-            return null;
-        }
-
-        //List View is created and parsed JSON data form web service is appended to a new item of the list
-        @Override
-        protected void onPostExecute(String strFromDoInBg) {
-            new AsyncTaskParseJson2().execute();
-        }
-    }
-
-    //
-    public class AsyncTaskParseJson2 extends AsyncTask<String, String, String> {
-
-        //Call to Graph API plus the user accessToken to get details from Facebook
-        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,email&access_token=" + accessToken);
-        String yourServiceUrl = (FB_API);
-        JSONObject FBJSON = new JSONObject();
-
-        @Override
-        protected void onPreExecute() {
-        }
-
-        @Override
-        //Call getFacebook method
-        protected String doInBackground(String... arg0) {
-
-            try {
-                getFacebook jParser = new getFacebook();
-
-                FBJSON = jParser.getJSONFromUrl(MainActivity.this, yourServiceUrl, authToken);
-            } catch (Exception e) {
-                e.printStackTrace();
-                Log.e("ERROR", e.toString());
-            }
-            return null;
-        }
-
-        //List View is created and parsed JSON data form web service is appended to a new item of the list
-        @Override
-        protected void onPostExecute(String strFromDoInBg) {
-            try {
-                //set array for storing of parsed data
-                String[] results = new String[3];
-                results[0] = FBJSON.getString("name");
-                results[1] = FBJSON.getString("email");
-                results[2] = FBJSON.getString("gender");
-                String USERID = FBJSON.getString("id"); //facebook name
-
-                ImageView image = (ImageView) findViewById(R.id.profilePicture);
-                new getDisplayPicture(image).execute("https://graph.facebook.com/" + USERID + "/picture?type=large"); //call to graph API to get user profile picture
-
-                //Array list declared, to which all facebook data is stored per each item in the list view
-                ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
-                ListView list = (ListView) findViewById(R.id.dataView);
-                ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
-
-                list.setAdapter(facebookAdapter);
-            }catch (Exception e)
-            {
-
-            }
-        }
     }
 
     //getAzure method gets the facebook authentication token  - allowing to make a call to the facebook Graph API
@@ -487,6 +311,7 @@ public class MainActivity extends Activity {
                         br.close();
                         //JSON returned as a JSONObject
                         try {
+                            //string builder method is used to get the correct token, failed to get as object
                             json  = sb.toString();
                             json = json.substring(json.indexOf(":") + 1);
                             json = json.substring(0, json.indexOf(","));
@@ -499,7 +324,7 @@ public class MainActivity extends Activity {
 
                         return json;
                 }
-                // HTTP 200 and 201 error handling from switch statement
+                //HTTP 200 and 201 error handling
             } catch (MalformedURLException ex) {
                 Log.e(TAG, "Malformed URL ");
             } catch (IOException ex) {
@@ -550,7 +375,7 @@ public class MainActivity extends Activity {
                         br.close();
                         //JSON returned as a JSONObject
                         try {
-                           dataFb = new JSONObject(sb.toString());
+                            dataFb = new JSONObject(sb.toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error parsing data " + e.toString());
 
@@ -559,13 +384,97 @@ public class MainActivity extends Activity {
 
                         return dataFb;
                 }
-                // HTTP 200 and 201 error handling from switch statement
+                // HTTP 200 and 201 error handling
             } catch (MalformedURLException ex) {
                 Log.e(TAG, "Malformed URL ");
             } catch (IOException ex) {
                 Log.e(TAG, "IO Exception ");
             }
             return dataFb;
+        }
+    }
+
+    public class AsyncTaskParseJson extends AsyncTask<String, String, String> {
+
+        ArrayList<String> items = new ArrayList<String>();
+
+        //API call shows RAW JSON data for authenticated facebook account
+        private static final String API = "https://lewismcservice.azurewebsites.net/.auth/me";
+
+        @Override
+        protected void onPreExecute() {
+        }
+        @Override
+        protected String doInBackground(String... arg0) {
+
+            try {
+                getAzure jParser = new getAzure();
+                accessResult = jParser.getJSONFromUrl(MainActivity.this, API, authToken);
+                accessToken = accessResult;
+            } catch (Exception e) {
+                e.printStackTrace();
+                Log.e("ERRORR", e.toString());
+            }
+            return null;
+        }
+
+        //List View is created and parsed JSON data form web service is appended to a new item of the list
+        @Override
+        protected void onPostExecute(String strFromDoInBg) {
+            new AsyncTaskParseJsonFB().execute();
+        }
+    }
+
+    public class AsyncTaskParseJsonFB extends AsyncTask<String, String, String> {
+
+        //Call to Graph API plus the user accessToken to get details from Facebook
+        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,email&access_token=" + accessToken);
+        String yourServiceUrl = (FB_API);
+        JSONObject FBJSON = new JSONObject();
+
+        @Override
+        protected void onPreExecute() {
+        }
+
+        @Override
+        //Call getFacebook method
+        protected String doInBackground(String... arg0) {
+
+            try {
+                getFacebook jParser = new getFacebook();
+
+                FBJSON = jParser.getJSONFromUrl(MainActivity.this, yourServiceUrl, authToken);
+            } catch (Exception e) {
+                e.printStackTrace();
+                Log.e("ERROR", e.toString());
+            }
+            return null;
+        }
+
+        //List View is created and parsed JSON data form web service is appended to a new item of the list
+        @Override
+        protected void onPostExecute(String strFromDoInBg) {
+            try {
+                //set array for storing of parsed data
+                String[] results = new String[3];
+                results[0] = FBJSON.getString("name");
+                results[1] = FBJSON.getString("email");
+                results[2] = FBJSON.getString("gender");
+                String USERID = FBJSON.getString("id"); //facebook name
+
+                ImageView image = (ImageView) findViewById(R.id.profilePicture);
+                new getDisplayPicture(image).execute("https://graph.facebook.com/" + USERID + "/picture?type=large"); //call to graph API to get user profile picture
+
+                //Array list declared, to which all facebook data is stored per each item in the list view
+                ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
+                ListView list = (ListView) findViewById(R.id.dataView);
+                ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
+
+                list.setAdapter(facebookAdapter);
+            }catch (Exception e)
+            {
+
+            }
         }
     }
 }

@@ -50,4 +50,16 @@
         android:layout_alignEnd="@+id/dataView"
         android:layout_marginEnd="134dp" />
 
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Log Out"
+        android:onClick="closeApplication"
+        android:id="@+id/logOutButton"
+        android:background="@color/com_facebook_blue"
+        android:textColor="@android:color/white"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="73dp" />
+
 </RelativeLayout>
